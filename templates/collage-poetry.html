@@ -482,6 +482,13 @@ function renderPortrait(domCv, cb) {
     ctx.restore();
   });
 
+  // 底部水印
+  const wmY = outH - 30;
+  ctx.fillStyle = 'rgba(120,100,80,0.45)';
+  ctx.font = '13px system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('Made with collage-poetry · https://github.com/stella10050525/collage-poetry', outW/2, wmY);
+
   cb(c.toDataURL('image/png'));
 }
 </script>
