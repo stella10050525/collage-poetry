@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拼贴诗</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 100vw; min-height: 100vh; overflow: hidden;
+    font-family: system-ui, sans-serif;
+  }
+
+  .desk {
+    width: 100%; min-height: 100vh; position: relative;
+    background:
+      repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(139,90,43,0.04) 40px, rgba(139,90,43,0.04) 41px),
+      linear-gradient(175deg, #e8d5b7 0%, #d4c4a8 25%, #c9b896 50%, #d1c0a0 75%, #e0ccb0 100%);
+    padding: 30px;
+  }
+
+  .desk::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+    background-size: 200px; opacity: 0.5; pointer-events: none; z-index: 0;
+  }
+
+  .desk::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.15) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .header { position: relative; z-index: 1; text-align: center; margin-bottom: 24px; }
+
+  .header h1 {
+    font-family: "STKaiti","KaiTi","楷体",serif;
+    font-size: 24px; color: #5a4530;
+    letter-spacing: 6px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+  }
+
+  .header p {
+    font-family: "SimSun","宋体",serif;
+    font-size: 11px; color: #8a7a6a; margin-top: 4px; letter-spacing: 2px;
+  }
+
+  /* ===== 左右布局 ===== */
+  .layout {
+    position: relative; z-index: 1;
+    display: flex; gap: 20px;
+    height: calc(100vh - 120px); min-height: 500px;
+  }
+
+  /* 左侧素材池 */
+  .pool-section {
+    width: 340px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    padding: 20px;
+    background: rgba(255,252,245,0.6);
+    border-radius: 8px; border: 1px dashed rgba(139,90,43,0.3);
+    position: relative;
+  }
+
+  .pool-label {
+    font-family: "SimHei","黑体",sans-serif;
+    font-size: 13px; color: #9a8a7a; margin-bottom: 14px; letter-spacing: 2px; flex-shrink: 0;
+  }
+
+  .pool {
+    flex: 1; overflow-y: auto; padding-right: 6px; padding-bottom: 50px;
+    display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px;
+  }
+
+  .pool::-webkit-scrollbar { width: 4px; }
+  .pool::-webkit-scrollbar-thumb { background: rgba(139,90,43,0.2); border-radius: 2px; }
+
+  /* 右侧画布 */
+  .canvas-section {
+    flex: 1; position: relative;
+    padding: 30px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 4px; border: 2px dashed rgba(139,90,43,0.15);
+    overflow: auto;
+  }
+
+  .canvas-hint {
+    font-family: "SimHei","黑体",sans-serif;
+    font-size: 12px; color: #bbb; text-align: center;
+    letter-spacing: 2px; pointer-events: none;
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    transition: opacity 0.3s;
+  }
+
+  .canvas-section.has-content .canvas-hint { opacity: 0; }
+
+  /* ===== 碎片 ===== */
+  .fragment {
+    position: relative; display: inline-block;
+    padding: 5px 12px; cursor: grab;
+    transition: box-shadow 0.2s;
+    user-select: none; white-space: nowrap;
+  }
+
+  .fragment:active { cursor: grabbing; }
+  .fragment:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.18) !important; z-index: 100 !important; }
+  .canvas-section .fragment:hover { transform: scale(1.03) !important; }
+
+  .fragment.clip-1 { clip-path: polygon(2% 0%, 98% 2%, 100% 96%, 1% 100%); }
+  .fragment.clip-2 { clip-path: polygon(0% 3%, 96% 0%, 100% 98%, 3% 95%); }
+  .fragment.clip-3 { clip-path: polygon(4% 0%, 100% 1%, 97% 100%, 0% 97%); }
+  .fragment.clip-4 { clip-path: polygon(1% 2%, 95% 0%, 100% 94%, 2% 100%); }
+  .fragment.clip-5 { clip-path: polygon(0% 0%, 97% 3%, 100% 97%, 3% 100%); }
+
+  .fragment::before {
+    content: ''; position: absolute;
+    top: -8px; left: 50%; transform: translateX(-50%) rotate(var(--tape-rot,-5deg));
+    width: 28px; height: 12px;
+    background: rgba(220,210,180,0.55);
+    border: 1px solid rgba(180,170,140,0.3); border-radius: 1px;
+    opacity: 0.7; z-index: 2;
+  }
+
+  /* ===== 按钮 ===== */
+  .btn {
+    position: absolute;
+    padding: 8px 18px;
+    border: none; border-radius: 6px;
+    font-family: "SimHei","黑体",sans-serif;
+    font-size: 13px; cursor: pointer;
+    transition: all 0.2s; letter-spacing: 1px; z-index: 10;
+  }
+
+  .btn-ai-poem {
+    bottom: 14px; right: 14px;
+    background: linear-gradient(135deg, #c9a87c, #b8946a); color: #fff;
+  }
+  .btn-ai-poem:hover { background: linear-gradient(135deg, #d4b88c, #c8a478); }
+
+  .btn-export {
+    bottom: 14px; right: 14px;
+    background: #8a7a6a; color: #fff;
+  }
+  .btn-export:hover { background: #7a6a5a; }
+
+  .btn-clear {
+    bottom: 14px; left: 14px;
+    background: rgba(200,180,160,0.5); color: #7a6a5a;
+    border: 1px solid rgba(160,140,120,0.3);
+  }
+  .btn-clear:hover { background: rgba(200,180,160,0.8); }
+
+  /* 导出预览弹窗 */
+  .preview-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 10000;
+    align-items: center; justify-content: center;
+  }
+  .preview-overlay.visible { display: flex; }
+
+  .preview-box {
+    background: #fffef5; border-radius: 12px;
+    padding: 24px; max-width: 90vw; max-height: 90vh;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+    text-align: center;
+  }
+
+  .preview-box canvas { max-width: 100%; max-height: 70vh; border-radius: 4px; }
+
+  .preview-actions { margin-top: 16px; display: flex; gap: 12px; justify-content: center; }
+
+  .preview-btn {
+    padding: 8px 20px; border: none; border-radius: 6px;
+    font-family: "SimHei","黑体",sans-serif;
+    font-size: 13px; cursor: pointer; transition: all 0.2s;
+  }
+
+  .preview-btn.download { background: #c9a87c; color: #fff; }
+  .preview-btn.download:hover { background: #b8946a; }
+  .preview-btn.cancel { background: #e0d8cc; color: #6a5a4a; }
+  .preview-btn.cancel:hover { background: #d4c8b8; }
+</style>
+</head>
+<body>
+
+<div class="desk">
+  <div class="header">
+    <h1>拼 贴 诗</h1>
+    <p>— 从对话的碎片中打捞诗意 —</p>
+  </div>
+
+  <div class="layout">
+    <div class="pool-section">
+      <div class="pool-label">素材池 · 拖拽拼贴 或 AI拼贴</div>
+      <div class="pool" id="pool"></div>
+      <button class="btn btn-ai-poem" id="btnAiPoem">AI拼贴</button>
+    </div>
+
+    <div class="canvas-section" id="canvas">
+      <div class="canvas-hint" id="canvasHint">拖拽碎片到这里开始创作</div>
+      <button class="btn btn-clear" id="btnClear">一键清空</button>
+      <button class="btn btn-export" id="btnExport">导出作品图片</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导出预览弹窗 -->
+<div class="preview-overlay" id="previewOverlay">
+  <div class="preview-box">
+    <canvas id="previewCanvas"></canvas>
+    <div class="preview-actions">
+      <button class="preview-btn download" id="btnDownload">下载PNG</button>
+      <button class="preview-btn cancel" id="btnPreviewClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 素材池数据（由skill替换） =====
+const FRAGMENTS = [
+  '今天天气不错','代码跑通了','窗外的雨','错误已修复',
+  '蓝色','沉默的','服务器','凌晨三点','咖啡冷了',
+  '重启','世界安静下来','终于','月光洒在','调试日志里',
+  '一朵花','沉默不语','星空','等待','风穿过',
+  '记忆深处','光影','孤独','醒来','远方的海',
+  '旧信件','雨停了','时间','空白','回声',
+  '指尖','黄昏','落叶','梦境','未发送的消息',
+  '心跳','迷雾','光','深渊',
+  '你好世界','晚安','遗忘','温柔','裂缝中的光'
+];
+
+// ===== AI预置诗组（轮流使用） =====
+const POEMS = [
+  ['凌晨三点','调试日志里','咖啡冷了','世界安静下来','窗外的雨','沉默不语','月光洒在','裂缝中的光'],
+  ['重启','一朵花','终于','记忆深处','光影','孤独','等待','远方的海'],
+  ['蓝色','风穿过','旧信件','雨停了','时间','回声','指尖','黄昏'],
+  ['心跳','迷雾','光','深渊','落叶','梦境','未发送的消息','你好世界'],
+];
+
+const FONTS = [
+  '"STKaiti","KaiTi","楷体"','"SimSun","宋体"','"SimHei","黑体"',
+  '"FangSong","仿宋"','"YouYuan","幼圆"','"Microsoft YaHei","微软雅黑"',
+  '"STSong","华文宋体"','"STXingkai","华文行楷"','"LiSu","隶书"'
+];
+
+const COLORS = ['#2a2a2a','#3d3d3d','#1a1a3a','#4a1a1a','#1a3a2a','#2d2d4a','#3a2a1a','#1a2a3a','#4a3a2a'];
+const BGS = ['#fffef5','#f5f0e5','#faf8f0','#f0ece0','#f8f5ec','#f2efe8','#fef9ef','#f7f3e8'];
+
+let fragId = 0;
+let aiMode = true; // true=JS随机, false=AI构思
+
+// 记录每个碎片属性（导出时需要）
+const fragMeta = new Map();
+
+function makeFrag(text, x, y, parent) {
+  const el = document.createElement('div');
+  el.className = `fragment clip-${Math.ceil(Math.random()*5)}`;
+  el.textContent = text;
+  el.dataset.id = fragId++;
+
+  const font = FONTS[Math.floor(Math.random()*FONTS.length)];
+  const size = Math.floor(Math.random()*14)+14;
+  const color = COLORS[Math.floor(Math.random()*COLORS.length)];
+  const bg = BGS[Math.floor(Math.random()*BGS.length)];
+  const rot = (Math.random()*24-12).toFixed(1);
+  const tapeRot = (Math.random()*20-10).toFixed(1);
+
+  el.style.fontFamily = font;
+  el.style.fontSize = size+'px';
+  el.style.color = color;
+  el.style.backgroundColor = bg;
+  el.style.transform = `rotate(${rot}deg)`;
+  el.style.setProperty('--tape-rot', tapeRot+'deg');
+  el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)';
+  el.style.zIndex = Math.floor(Math.random()*10);
+
+  if (x !== undefined) {
+    el.style.position = 'absolute';
+    el.style.left = x+'px';
+    el.style.top = y+'px';
+  }
+
+  fragMeta.set(el.dataset.id, { text, font, size, color, bg, rot });
+  attachDrag(el, parent);
+  parent.appendChild(el);
+  return el;
+}
+
+// ===== 初始化 =====
+(function init() {
+  const pool = document.getElementById('pool');
+  FRAGMENTS.forEach(t => makeFrag(t, undefined, undefined, pool));
+})();
+
+// ===== 拖拽 =====
+function attachDrag(el) {
+  let drag=false, moved=false, ox, oy;
+
+  el.addEventListener('mousedown', e => {
+    if (e.button!==0) return;
+    e.preventDefault(); e.stopPropagation();
+    drag=true; moved=false;
+    const r = el.getBoundingClientRect();
+    ox = e.clientX-r.left; oy = e.clientY-r.top;
+    el.style.transition='none';
+    el.style.zIndex=500;
+    el.style.position='fixed';
+    el.style.left=(e.clientX-ox)+'px';
+    el.style.top=(e.clientY-oy)+'px';
+    el.style.boxShadow='0 8px 28px rgba(0,0,0,0.22)';
+    document.body.appendChild(el);
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    moved=true;
+    el.style.left=(e.clientX-ox)+'px';
+    el.style.top=(e.clientY-oy)+'px';
+  });
+
+  document.addEventListener('mouseup', e => {
+    if (!drag) return;
+    drag=false;
+    const cv = document.getElementById('canvas');
+    const cr = cv.getBoundingClientRect();
+    if (e.clientX>=cr.left && e.clientX<=cr.right && e.clientY>=cr.top && e.clientY<=cr.bottom) {
+      const cs = getComputedStyle(cv);
+      el.style.position='absolute';
+      el.style.left=(e.clientX-cr.left-(parseFloat(cs.paddingLeft)||30))+'px';
+      el.style.top=(e.clientY-cr.top-(parseFloat(cs.paddingTop)||30))+'px';
+      cv.appendChild(el);
+      cv.classList.add('has-content');
+    } else {
+      el.style.position='relative';
+      el.style.left='auto'; el.style.top='auto';
+      el.style.zIndex='';
+      document.getElementById('pool').appendChild(el);
+    }
+    el.style.transition='box-shadow 0.2s';
+    el.style.boxShadow='0 2px 8px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08)';
+  });
+}
+
+// ===== 清空画布 =====
+function clearCanvas() {
+  const cv = document.getElementById('canvas');
+  const pool = document.getElementById('pool');
+  cv.querySelectorAll('.fragment').forEach(f => {
+    f.style.position='relative'; f.style.left='auto'; f.style.top='auto'; f.style.zIndex='';
+    const nr = (Math.random()*24-12).toFixed(1);
+    const m = fragMeta.get(f.dataset.id);
+    if (m) m.rot = nr;
+    f.style.transform = `rotate(${nr}deg)`;
+    pool.appendChild(f);
+  });
+  cv.classList.remove('has-content');
+}
+
+// ===== AI拼贴（交替） =====
+document.getElementById('btnAiPoem').addEventListener('click', () => {
+  clearCanvas();
+  if (aiMode) { doRandom(); } else { doAi(); }
+  aiMode = !aiMode;
+});
+
+function doRandom() {
+  const cv = document.getElementById('canvas');
+  const n = Math.floor(Math.random()*4)+5;
+  const shuf = [...FRAGMENTS].sort(()=>0.5-Math.random()).slice(0,n);
+  let x=40, y=40;
+  shuf.forEach((t,i) => {
+    if (i>0 && i%2===0) { x=40+Math.random()*30; y+=55+Math.random()*10; }
+    else if (i>0) { x+=110+Math.random()*40; }
+    makeFrag(t, x, y, cv);
+  });
+  cv.classList.add('has-content');
+}
+
+function doAi() {
+  const cv = document.getElementById('canvas');
+  const poem = POEMS[Math.floor(Math.random()*POEMS.length)];
+  let x=60, y=60;
+  poem.forEach((t,i) => {
+    if (i>0 && i%2===0) { x=60+Math.random()*20; y+=58+Math.random()*8; }
+    else if (i>0) { x+=130+Math.random()*30; }
+    const el = makeFrag(t, x, y, cv);
+    const m = el.style.transform.match(/rotate\(([-\d.]+)deg\)/);
+    const r = m ? parseFloat(m[1]) : 0;
+    el.style.transform = `rotate(${r*0.4}deg)`;
+    const d = fragMeta.get(el.dataset.id);
+    if (d) d.rot = (r*0.4).toFixed(1);
+  });
+  cv.classList.add('has-content');
+}
+
+// ===== 清空按钮 =====
+document.getElementById('btnClear').addEventListener('click', clearCanvas);
+
+// ===== 导出 =====
+document.getElementById('btnExport').addEventListener('click', () => {
+  const cv = document.getElementById('canvas');
+  if (!cv.querySelectorAll('.fragment').length) { alert('画布上没有碎片，先拼贴再导出'); return; }
+  renderPortrait(cv, dataUrl => {
+    const overlay = document.getElementById('previewOverlay');
+    const pc = document.getElementById('previewCanvas');
+    const ctx = pc.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      pc.width = img.width; pc.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      overlay.classList.add('visible');
+    };
+    img.src = dataUrl;
+  });
+});
+
+document.getElementById('btnPreviewClose').addEventListener('click', () => {
+  document.getElementById('previewOverlay').classList.remove('visible');
+});
+
+document.getElementById('btnDownload').addEventListener('click', () => {
+  const pc = document.getElementById('previewCanvas');
+  const a = document.createElement('a');
+  a.download = `拼贴诗_${Date.now()}.png`;
+  a.href = pc.toDataURL('image/png');
+  a.click();
+});
+
+// ===== 竖版渲染 =====
+function renderPortrait(domCv, cb) {
+  const frags = domCv.querySelectorAll('.fragment');
+  if (!frags.length) return;
+
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const items = [];
+
+  frags.forEach(f => {
+    const d = fragMeta.get(f.dataset.id);
+    if (!d) return;
+    const fx = parseFloat(f.style.left)||0;
+    const fy = parseFloat(f.style.top)||0;
+    const fw = d.text.length * parseInt(d.size) * 0.7 + 28;
+    const fh = parseInt(d.size) + 12;
+    items.push({ d, x:fx, y:fy, fw, fh });
+    minX = Math.min(minX, fx); minY = Math.min(minY, fy);
+    maxX = Math.max(maxX, fx+fw); maxY = Math.max(maxY, fy+fh);
+  });
+
+  const cw = maxX-minX, ch = maxY-minY;
+  const mg = 80;
+  const outW = 750;
+  const sc = (outW-mg*2)/cw;
+  const outH = Math.max(outW, Math.ceil(ch*sc+mg*2));
+
+  const c = document.createElement('canvas');
+  c.width = outW; c.height = outH;
+  const ctx = c.getContext('2d');
+
+  // 背景
+  ctx.fillStyle = '#e8d8c0';
+  ctx.fillRect(0,0,outW,outH);
+  for (let i=0; i<800; i++) {
+    const a = Math.random()*0.04;
+    ctx.fillStyle = `rgba(${Math.random()>0.5?0:80},${Math.random()>0.5?0:60},${Math.random()>0.5?0:40},${a})`;
+    ctx.fillRect(Math.random()*outW, Math.random()*outH, 2, 2);
+  }
+
+  items.forEach(({d, x, y}) => {
+    ctx.save();
+    ctx.translate((x-minX+mg)*sc, (y-minY+mg)*sc);
+    ctx.rotate((parseFloat(d.rot)||0)*Math.PI/180);
+    ctx.fillStyle = d.bg;
+    const fw = d.text.length*parseInt(d.size)*0.7+28;
+    const fh = parseInt(d.size)+12;
+    ctx.fillRect(-fw/2*sc, -fh/2*sc, fw*sc, fh*sc);
+    ctx.fillStyle = d.color;
+    ctx.font = `${d.size*sc}px ${d.font.replace(/"/g,'')}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(d.text, 0, 0);
+    ctx.restore();
+  });
+
+  cb(c.toDataURL('image/png'));
+}
+</script>
+</body>
+</html>
