@@ -1,6 +1,8 @@
 ---
 name: collage-poetry
-description: Create interactive collage poetry (拼贴诗) from conversation context. Extracts text fragments from dialogue history and generates a standalone HTML page where users can drag-and-drop fragments to compose poetry, or generate with AI.
+description: |
+  从对话上下文中提取文字片段，生成可交互的拼贴诗HTML页面。
+  Extract text fragments from conversation context and generate an interactive collage poetry HTML page.
 license: MIT
 ---
 
